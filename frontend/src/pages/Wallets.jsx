@@ -18,8 +18,8 @@ export default function Wallets() {
 
   const fetchWallets = async () => {
     try {
-      const res = await walletsAPI.getAll();
-      setWallets(res.data.wallets);
+      const data = await walletsAPI.getAll();
+      setWallets(data);
     } catch (err) {
       console.error('Failed to fetch wallets:', err);
     } finally {
@@ -61,7 +61,7 @@ export default function Wallets() {
       setModalOpen(false);
       fetchWallets();
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Something went wrong.');
+      setFormError(err.message || 'Something went wrong.');
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +75,7 @@ export default function Wallets() {
       setDeleteModal(null);
       fetchWallets();
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Failed to delete.');
+      setFormError(err.message || 'Failed to delete.');
     } finally {
       setSubmitting(false);
     }

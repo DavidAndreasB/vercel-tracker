@@ -28,13 +28,13 @@ export default function Transactions() {
 
   const fetchTransactions = useCallback(async (page = 1) => {
     try {
-      const res = await transactionsAPI.getAll(page);
-      setTransactions(res.data.data);
+      const result = await transactionsAPI.getAll(page);
+      setTransactions(result.data);
       setPagination({
-        currentPage: res.data.current_page,
-        lastPage: res.data.last_page,
-        total: res.data.total,
-        perPage: res.data.per_page,
+        currentPage: result.current_page,
+        lastPage: result.last_page,
+        total: result.total,
+        perPage: result.per_page,
       });
     } catch (err) {
       console.error('Failed to fetch transactions:', err);
@@ -45,12 +45,12 @@ export default function Transactions() {
 
   const fetchFormData = async () => {
     try {
-      const [walletsRes, categoriesRes] = await Promise.all([
+      const [walletsData, categoriesData] = await Promise.all([
         walletsAPI.getAll(),
         categoriesAPI.getAll(),
       ]);
-      setWallets(walletsRes.data.wallets);
-      setCategories(categoriesRes.data.categories);
+      setWallets(walletsData);
+      setCategories(categoriesData);
     } catch (err) {
       console.error('Failed to fetch form data:', err);
     }
@@ -112,13 +112,7 @@ export default function Transactions() {
       setModalOpen(false);
       fetchTransactions(currentPage);
     } catch (err) {
-      const errors = err.response?.data?.errors;
-      if (errors) {
-        const firstError = Object.values(errors)[0];
-        setFormError(Array.isArray(firstError) ? firstError[0] : firstError);
-      } else {
-        setFormError(err.response?.data?.message || 'Something went wrong.');
-      }
+      setFormError(err.message || 'Something went wrong.');
     } finally {
       setSubmitting(false);
     }

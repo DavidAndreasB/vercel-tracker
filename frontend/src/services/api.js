@@ -1,85 +1,303 @@
-import axios from 'axios';
-
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-});
-
-// ── Request Interceptor: Attach Bearer Token ──
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ── Response Interceptor: Handle 401 Unauthorized ──
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+import { supabase } from './supabase';
 
 // ═══════════════════════════════════════════════════════════
 // AUTH API
 // ═══════════════════════════════════════════════════════════
 export const authAPI = {
-  register: (data) => api.post('/register', data),
-  login:    (data) => api.post('/login', data),
-  logout:   ()     => api.post('/logout'),
+  register: async ({ name, email, password }) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name },
+      },
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  login: async ({ email, password }) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  logout: async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════
 // WALLETS API
 // ═══════════════════════════════════════════════════════════
 export const walletsAPI = {
-  getAll:  ()           => api.get('/wallets'),
-  getOne:  (id)         => api.get(`/wallets/${id}`),
-  create:  (data)       => api.post('/wallets', data),
-  update:  (id, data)   => api.put(`/wallets/${id}`, data),
-  delete:  (id)         => api.delete(`/wallets/${id}`),
+  getAll: async () => {
+    const { data, error } = await supabase
+      .from('wallets')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  getOne: async (id) => {
+    const { data, error } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  create: async (walletData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('wallets')
+      .insert({ ...walletData, user_id: user.id })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  update: async (id, walletData) => {
+    const { data, error } = await supabase
+      .from('wallets')
+      .update(walletData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  delete: async (id) => {
+    const { error } = await supabase
+      .from('wallets')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════
 // CATEGORIES API
 // ═══════════════════════════════════════════════════════════
 export const categoriesAPI = {
-  getAll:  ()           => api.get('/categories'),
-  getOne:  (id)         => api.get(`/categories/${id}`),
-  create:  (data)       => api.post('/categories', data),
-  update:  (id, data)   => api.put(`/categories/${id}`, data),
-  delete:  (id)         => api.delete(`/categories/${id}`),
+  getAll: async () => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('type')
+      .order('name');
+    if (error) throw error;
+    return data;
+  },
+
+  getOne: async (id) => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  create: async (categoryData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({ ...categoryData, user_id: user.id })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  update: async (id, categoryData) => {
+    const { data, error } = await supabase
+      .from('categories')
+      .update(categoryData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  delete: async (id) => {
+    // Check if category has transactions before deleting
+    const { count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact', head: true })
+      .eq('category_id', id);
+
+    if (count > 0) {
+      throw new Error('Cannot delete category with existing transactions. Please remove or reassign them first.');
+    }
+
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════
 // TRANSACTIONS API
 // ═══════════════════════════════════════════════════════════
+const PER_PAGE = 20;
+
 export const transactionsAPI = {
-  getAll:  (page = 1)   => api.get(`/transactions?page=${page}`),
-  getOne:  (id)         => api.get(`/transactions/${id}`),
-  create:  (data)       => api.post('/transactions', data),
-  update:  (id, data)   => api.put(`/transactions/${id}`, data),
-  delete:  (id)         => api.delete(`/transactions/${id}`),
+  getAll: async (page = 1) => {
+    const from = (page - 1) * PER_PAGE;
+    const to = from + PER_PAGE - 1;
+
+    // Get total count
+    const { count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact', head: true });
+
+    // Get paginated data with related wallet and category names
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(`
+        *,
+        wallet:wallets(id, name, type),
+        category:categories(id, name, type)
+      `)
+      .order('transaction_date', { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    return {
+      data,
+      current_page: page,
+      last_page: Math.ceil((count || 0) / PER_PAGE),
+      total: count || 0,
+      per_page: PER_PAGE,
+    };
+  },
+
+  create: async (txnData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.rpc('create_transaction', {
+      p_user_id: user.id,
+      p_wallet_id: txnData.wallet_id,
+      p_category_id: txnData.category_id,
+      p_amount: txnData.amount,
+      p_transaction_date: txnData.transaction_date,
+      p_notes: txnData.notes || null,
+      p_tags: txnData.tags || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  update: async (id, txnData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.rpc('update_transaction', {
+      p_user_id: user.id,
+      p_transaction_id: id,
+      p_wallet_id: txnData.wallet_id,
+      p_category_id: txnData.category_id,
+      p_amount: txnData.amount,
+      p_transaction_date: txnData.transaction_date,
+      p_notes: txnData.notes || null,
+      p_tags: txnData.tags || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  delete: async (id) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.rpc('delete_transaction', {
+      p_user_id: user.id,
+      p_transaction_id: id,
+    });
+    if (error) throw error;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════
 // DASHBOARD API
 // ═══════════════════════════════════════════════════════════
 export const dashboardAPI = {
-  get: () => api.get('/dashboard'),
-};
+  get: async () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01T00:00:00`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const monthEnd = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00`;
 
-export default api;
+    // Fetch wallets
+    const { data: wallets, error: walletsError } = await supabase
+      .from('wallets')
+      .select('id, name, type, balance')
+      .order('name');
+    if (walletsError) throw walletsError;
+
+    // Total net worth
+    const totalNetWorth = (wallets || []).reduce((sum, w) => sum + w.balance, 0);
+
+    // Fetch current month transactions with category info
+    const { data: monthlyTransactions, error: txnError } = await supabase
+      .from('transactions')
+      .select(`
+        amount,
+        category:categories(id, name, type)
+      `)
+      .gte('transaction_date', monthStart)
+      .lt('transaction_date', monthEnd);
+    if (txnError) throw txnError;
+
+    // Calculate monthly income/expense and category breakdown
+    let currentMonthIncome = 0;
+    let currentMonthExpense = 0;
+    const categoryMap = {};
+
+    (monthlyTransactions || []).forEach((txn) => {
+      const cat = txn.category;
+      if (!cat) return;
+
+      if (cat.type === 'income') {
+        currentMonthIncome += txn.amount;
+      } else {
+        currentMonthExpense += txn.amount;
+      }
+
+      if (!categoryMap[cat.id]) {
+        categoryMap[cat.id] = {
+          id: cat.id,
+          name: cat.name,
+          type: cat.type,
+          total: 0,
+          transaction_count: 0,
+        };
+      }
+      categoryMap[cat.id].total += txn.amount;
+      categoryMap[cat.id].transaction_count += 1;
+    });
+
+    const categoryBreakdown = Object.values(categoryMap).sort((a, b) => b.total - a.total);
+
+    return {
+      total_net_worth: totalNetWorth,
+      current_month_income: currentMonthIncome,
+      current_month_expense: currentMonthExpense,
+      category_breakdown: categoryBreakdown,
+      wallets,
+    };
+  },
+};

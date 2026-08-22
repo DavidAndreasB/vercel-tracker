@@ -18,8 +18,8 @@ export default function Categories() {
 
   const fetchCategories = async () => {
     try {
-      const res = await categoriesAPI.getAll();
-      setCategories(res.data.categories);
+      const data = await categoriesAPI.getAll();
+      setCategories(data);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
     } finally {
@@ -58,7 +58,7 @@ export default function Categories() {
       setModalOpen(false);
       fetchCategories();
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Something went wrong.');
+      setFormError(err.message || 'Something went wrong.');
     } finally {
       setSubmitting(false);
     }
@@ -73,7 +73,7 @@ export default function Categories() {
       setDeleteModal(null);
       fetchCategories();
     } catch (err) {
-      setDeleteError(err.response?.data?.message || 'Failed to delete category.');
+      setDeleteError(err.message || 'Failed to delete category.');
     } finally {
       setSubmitting(false);
     }

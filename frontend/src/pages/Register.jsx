@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AlertCircle } from 'lucide-react';
 
+const ALLOWED_EMAIL = 'davidandreas1235@gmail.com';
+
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -16,6 +18,8 @@ export default function Register() {
   const [generalError, setGeneralError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [successMessage, setSuccessMessage] = useState('');
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     // Clear field error on change
@@ -28,16 +32,36 @@ export default function Register() {
     e.preventDefault();
     setErrors({});
     setGeneralError('');
+    setSuccessMessage('');
+
+    // Client-side email restriction
+    if (form.email.toLowerCase() !== ALLOWED_EMAIL) {
+      setGeneralError('Registration is not available.');
+      return;
+    }
+
+    if (form.password !== form.password_confirmation) {
+      setErrors({ password_confirmation: ['Passwords do not match.'] });
+      return;
+    }
+
+    if (form.password.length < 8) {
+      setErrors({ password: ['Password must be at least 8 characters.'] });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await register(form);
+      await register({ name: form.name, email: form.email, password: form.password });
       navigate('/');
     } catch (err) {
-      if (err.response?.data?.errors) {
-        setErrors(err.response.data.errors);
+      const msg = err.message || 'Registration failed.';
+      // Check if it's actually a success message (email confirmation needed)
+      if (msg.toLowerCase().includes('registration successful')) {
+        setSuccessMessage(msg);
       } else {
-        setGeneralError(err.response?.data?.message || 'Registration failed.');
+        setGeneralError(msg);
       }
     } finally {
       setLoading(false);
@@ -52,6 +76,13 @@ export default function Register() {
           <h1>FinTrack</h1>
           <p>Create your account to get started</p>
         </div>
+
+        {successMessage && (
+          <div className="alert alert-success" style={{ background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#6ee7b7' }}>
+            <AlertCircle size={16} />
+            {successMessage}
+          </div>
+        )}
 
         {generalError && (
           <div className="alert alert-error">
@@ -119,6 +150,7 @@ export default function Register() {
               placeholder="Re-enter your password"
               required
             />
+            {errors.password_confirmation && <p className="form-error">{errors.password_confirmation[0]}</p>}
           </div>
 
           <button
