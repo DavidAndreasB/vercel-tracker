@@ -189,41 +189,136 @@ export const transactionsAPI = {
 
   create: async (txnData) => {
     const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.rpc('create_transaction', {
-      p_user_id: user.id,
-      p_wallet_id: txnData.wallet_id,
-      p_category_id: txnData.category_id,
-      p_amount: txnData.amount,
-      p_transaction_date: txnData.transaction_date,
-      p_notes: txnData.notes || null,
-      p_tags: txnData.tags || null,
-    });
+
+    // Insert the transaction
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: user.id,
+        wallet_id: txnData.wallet_id,
+        category_id: txnData.category_id,
+        amount: txnData.amount,
+        transaction_date: txnData.transaction_date,
+        notes: txnData.notes || null,
+        tags: txnData.tags || null,
+      })
+      .select(`*, category:categories(type)`)
+      .single();
     if (error) throw error;
+
+    // Update wallet balance based on category type
+    const isIncome = data.category?.type === 'income';
+    const balanceChange = isIncome ? txnData.amount : -txnData.amount;
+
+    // Get current wallet balance
+    const { data: wallet, error: walletErr } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', txnData.wallet_id)
+      .single();
+    if (walletErr) throw walletErr;
+
+    const { error: updateErr } = await supabase
+      .from('wallets')
+      .update({ balance: wallet.balance + balanceChange })
+      .eq('id', txnData.wallet_id);
+    if (updateErr) throw updateErr;
+
     return data;
   },
 
   update: async (id, txnData) => {
     const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.rpc('update_transaction', {
-      p_user_id: user.id,
-      p_transaction_id: id,
-      p_wallet_id: txnData.wallet_id,
-      p_category_id: txnData.category_id,
-      p_amount: txnData.amount,
-      p_transaction_date: txnData.transaction_date,
-      p_notes: txnData.notes || null,
-      p_tags: txnData.tags || null,
-    });
+
+    // Get the old transaction to reverse its effect on wallet balance
+    const { data: oldTxn, error: oldErr } = await supabase
+      .from('transactions')
+      .select(`*, category:categories(type)`)
+      .eq('id', id)
+      .single();
+    if (oldErr) throw oldErr;
+
+    // Reverse old transaction's effect on old wallet
+    const oldIsIncome = oldTxn.category?.type === 'income';
+    const oldBalanceChange = oldIsIncome ? -oldTxn.amount : oldTxn.amount;
+
+    const { data: oldWallet, error: oldWalletErr } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', oldTxn.wallet_id)
+      .single();
+    if (oldWalletErr) throw oldWalletErr;
+
+    await supabase
+      .from('wallets')
+      .update({ balance: oldWallet.balance + oldBalanceChange })
+      .eq('id', oldTxn.wallet_id);
+
+    // Update the transaction
+    const { data, error } = await supabase
+      .from('transactions')
+      .update({
+        wallet_id: txnData.wallet_id,
+        category_id: txnData.category_id,
+        amount: txnData.amount,
+        transaction_date: txnData.transaction_date,
+        notes: txnData.notes || null,
+        tags: txnData.tags || null,
+      })
+      .eq('id', id)
+      .select(`*, category:categories(type)`)
+      .single();
     if (error) throw error;
+
+    // Apply new transaction's effect on new wallet
+    const newIsIncome = data.category?.type === 'income';
+    const newBalanceChange = newIsIncome ? txnData.amount : -txnData.amount;
+
+    const { data: newWallet, error: newWalletErr } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', txnData.wallet_id)
+      .single();
+    if (newWalletErr) throw newWalletErr;
+
+    await supabase
+      .from('wallets')
+      .update({ balance: newWallet.balance + newBalanceChange })
+      .eq('id', txnData.wallet_id);
+
     return data;
   },
 
   delete: async (id) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.rpc('delete_transaction', {
-      p_user_id: user.id,
-      p_transaction_id: id,
-    });
+    // Get the transaction to reverse its effect on wallet balance
+    const { data: txn, error: txnErr } = await supabase
+      .from('transactions')
+      .select(`*, category:categories(type)`)
+      .eq('id', id)
+      .single();
+    if (txnErr) throw txnErr;
+
+    // Reverse the transaction's effect on wallet
+    const isIncome = txn.category?.type === 'income';
+    const balanceChange = isIncome ? -txn.amount : txn.amount;
+
+    const { data: wallet, error: walletErr } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', txn.wallet_id)
+      .single();
+    if (walletErr) throw walletErr;
+
+    await supabase
+      .from('wallets')
+      .update({ balance: wallet.balance + balanceChange })
+      .eq('id', txn.wallet_id);
+
+    // Delete the transaction
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id);
     if (error) throw error;
   },
 };
