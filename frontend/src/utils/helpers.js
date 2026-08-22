@@ -1,9 +1,9 @@
 /**
- * Format amount from smallest currency unit (cents/sen) to readable string.
- * Example: 15000000 → "Rp 150.000"
+ * Format amount to readable Indonesian Rupiah string.
+ * Example: 10000 → "Rp 10.000"
  */
 export function formatCurrency(amount) {
-  const value = Math.abs(amount) / 100;
+  const value = Math.abs(amount);
   return 'Rp ' + value.toLocaleString('id-ID', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,

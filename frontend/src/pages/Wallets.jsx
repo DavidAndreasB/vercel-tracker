@@ -183,7 +183,7 @@ export default function Wallets() {
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="wallet-balance">
-              {editingWallet ? 'Balance' : 'Initial Balance'} (in smallest unit)
+              {editingWallet ? 'Balance' : 'Initial Balance'}
             </label>
             <input
               id="wallet-balance"
@@ -191,7 +191,7 @@ export default function Wallets() {
               type="number"
               value={form.balance}
               onChange={(e) => setForm({ ...form, balance: e.target.value })}
-              placeholder="e.g. 15000000 for Rp 150.000"
+              placeholder="e.g. 150000 for Rp 150.000"
             />
           </div>
         </form>
